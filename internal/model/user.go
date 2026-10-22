@@ -4,6 +4,11 @@ import (
 	"gorm.io/gorm"
 )
 
+const (
+	RoleAdmin    = "admin"
+	RoleCustomer = "customer"
+)
+
 type User struct {
 	gorm.Model
 
