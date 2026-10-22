@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Echo Shop · Khách hàng</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>Echo Shop — Khách hàng</h1>
+
+  <fieldset>
+    <legend>1. Đăng nhập</legend>
+    <input id="email" value="clara@echo-shop.vn" size="22">
+    <input id="password" type="password" placeholder="password">
+    <button onclick="login()">Login</button>
+    <button onclick="connect()">Connect WS</button>
+  </fieldset>
+
+  <fieldset>
+    <legend>2. Đặt hàng (admin online sẽ nhận new_order)</legend>
+    Product ID <input id="product" type="number" value="1" min="1" style="width:5em">
+    SL <input id="qty" type="number" value="1" min="1" style="width:4em">
+    <button onclick="createOrder()">Đặt hàng</button>
+  </fieldset>
+
+  <fieldset>
+    <legend>3. Chat hỗ trợ theo đơn</legend>
+    Order ID <input id="room-order" type="number" min="1" style="width:5em">
+    <button onclick="joinRoom()">Join</button>
+    <button onclick="leaveRoom()">Leave</button><br>
+    <input id="chat-text" size="40" placeholder="Nhập tin nhắn..." oninput="onTyping()"
+           onkeydown="if (event.key === 'Enter') sendChat()">
+    <button onclick="sendChat()">Gửi</button>
+  </fieldset>
+
+  <ul id="log"></ul>
+
+  <script src="common.js"></script>
+  <script>
+    async function createOrder() {
+      try {
+        const order = await api("POST", "/orders", {
+          product_id: Number($("product").value),
+          quantity: Number($("qty").value),
+        });
+        $("room-order").value = order.ID; // ready to join the chat room of this order
+        log(`order #${order.ID} created (${order.status}, ${order.total}đ)`, "ok");
+      } catch (e) {
+        log(`create order failed: ${e.message}`, "err");
+      }
+    }
+  </script>
+</body>
+</html>

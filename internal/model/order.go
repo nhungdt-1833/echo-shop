@@ -4,6 +4,22 @@ import (
 	"gorm.io/gorm"
 )
 
+const (
+	OrderPending   = "PENDING"
+	OrderPaid      = "PAID"
+	OrderShipped   = "SHIPPED"
+	OrderDelivered = "DELIVERED"
+	OrderCancelled = "CANCELLED"
+)
+
+func IsValidOrderStatus(s string) bool {
+	switch s {
+	case OrderPending, OrderPaid, OrderShipped, OrderDelivered, OrderCancelled:
+		return true
+	}
+	return false
+}
+
 type Order struct {
 	gorm.Model
 

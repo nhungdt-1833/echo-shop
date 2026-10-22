@@ -30,6 +30,7 @@ func ParseToken(secret []byte, tokenString string) (*Claims, error) {
 	_, err := jwt.ParseWithClaims(tokenString, claims,
 		func(*jwt.Token) (any, error) { return secret, nil },
 		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
+		jwt.WithExpirationRequired(), // a token without exp would never expire
 	)
 	if err != nil {
 		return nil, err
