@@ -15,6 +15,7 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 
 	"echo-shop/internal/auth"
+	"echo-shop/internal/cache"
 	"echo-shop/internal/db"
 	"echo-shop/internal/handler"
 	"echo-shop/internal/model"
@@ -67,6 +68,13 @@ func main() {
 	authHandler := handler.NewAuthHandler(gdb, secret)
 	orderHandler := handler.NewOrderHandler(gdb, hub)
 	wsHandler := handler.NewWSHandler(hub, secret, allowedOrigins(port))
+
+	rdb := cache.NewRedis(os.Getenv("REDIS_ADDR"), os.Getenv("REDIS_PASSWORD"))
+	productHandler := handler.NewProductHandler(gdb, rdb)
+	// products = e.Group("products")
+	e.GET("/products", productHandler.List, cache.RedisCache(rdb, 60*time.Second))
+	e.GET("/products/:id", productHandler.Get, cache.RedisCache(rdb, 60*time.Second))
+	e.PUT("/products/:id", productHandler.Update, jwtAuth, auth.RequireRole(model.RoleAdmin))
 
 	e.GET("/health", func(c echo.Context) error {
 		return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
