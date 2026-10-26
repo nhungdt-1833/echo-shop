@@ -75,10 +75,10 @@ func main() {
 	products := e.Group("/products")
 	products.GET("/top", productHandler.Top)
 	products.GET("", productHandler.List, cache.RedisCache(rdb, 60*time.Second))
-	products.POST("", productHandler.Create, jwtAuth, auth.RequireRole(model.RoleAdmin))
+	products.POST("", productHandler.Create, jwtAuth, checkBlacklist, auth.RequireRole(model.RoleAdmin))
 	products.GET("/:id", productHandler.Get, cache.RedisCache(rdb, 60*time.Second))
-	products.PUT("/:id", productHandler.Update, jwtAuth, auth.RequireRole(model.RoleAdmin))
-	products.DELETE("/:id", productHandler.Delete, jwtAuth, auth.RequireRole(model.RoleAdmin))
+	products.PUT("/:id", productHandler.Update, jwtAuth, checkBlacklist, auth.RequireRole(model.RoleAdmin))
+	products.DELETE("/:id", productHandler.Delete, jwtAuth, checkBlacklist, auth.RequireRole(model.RoleAdmin))
 
 	e.GET("/health", func(c echo.Context) error {
 		return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
@@ -86,8 +86,9 @@ func main() {
 	e.Static("/web", "web")
 
 	e.POST("/login", authHandler.Login)
+	e.POST("/refresh", authHandler.Refresh)
 	e.POST("/logout", authHandler.Logout, jwtAuth, checkBlacklist)
-	e.GET("/me", authHandler.Me, jwtAuth, auth.CheckBlackList(rdb))
+	e.GET("/me", authHandler.Me, jwtAuth, checkBlacklist)
 	e.GET("/ws", wsHandler.Connect)
 	e.POST("/orders", orderHandler.Create, jwtAuth, checkBlacklist, auth.RequireRole(model.RoleCustomer))
 	e.PATCH("/orders/:id/status", orderHandler.UpdateStatus, jwtAuth, checkBlacklist, auth.RequireRole(model.RoleAdmin))
