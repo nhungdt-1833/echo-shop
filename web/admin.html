@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Echo Shop · Admin</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>Echo Shop — Admin dashboard</h1>
+
+  <fieldset>
+    <legend>1. Đăng nhập</legend>
+    <input id="email" value="admin@echo-shop.vn" size="22">
+    <input id="password" type="password" placeholder="password">
+    <button onclick="login()">Login</button>
+    <button onclick="connect()">Connect WS</button>
+  </fieldset>
+
+  <fieldset>
+    <legend>2. Đổi trạng thái đơn (chỉ chủ đơn nhận order_status)</legend>
+    Order ID <input id="order-id" type="number" min="1" style="width:5em">
+    <select id="status">
+      <option>PAID</option><option>SHIPPED</option><option>DELIVERED</option><option>CANCELLED</option>
+    </select>
+    <button onclick="updateStatus()">Cập nhật</button>
+  </fieldset>
+
+  <fieldset>
+    <legend>3. Chat hỗ trợ theo đơn</legend>
+    Order ID <input id="room-order" type="number" min="1" style="width:5em">
+    <button onclick="joinRoom()">Join</button>
+    <button onclick="leaveRoom()">Leave</button><br>
+    <input id="chat-text" size="40" placeholder="Nhập tin nhắn..." oninput="onTyping()"
+           onkeydown="if (event.key === 'Enter') sendChat()">
+    <button onclick="sendChat()">Gửi</button>
+  </fieldset>
+
+  <ul id="log"></ul>
+
+  <script src="common.js"></script>
+  <script>
+    async function updateStatus() {
+      const id = $("order-id").value;
+      try {
+        const order = await api("PATCH", `/orders/${id}/status`, { status: $("status").value });
+        log(`order #${order.ID} → ${order.status}`, "ok");
+      } catch (e) {
+        log(`update failed: ${e.message}`, "err");
+      }
+    }
+  </script>
+</body>
+</html>
