@@ -21,12 +21,12 @@ import (
 func newWSServer(t *testing.T) (hub *ws.Hub, wsURL string, secret []byte) {
 	t.Helper()
 	secret = []byte(strings.Repeat("s", 32))
-	hub = ws.NewHub(nil)
+	hub = ws.NewHub(nil, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	go hub.Run(ctx)
 
 	e := echo.New()
-	e.GET("/ws", NewWSHandler(hub, secret, []string{"http://allowed.test"}).Connect)
+	e.GET("/ws", NewWSHandler(hub, secret, nil, []string{"http://allowed.test"}).Connect)
 	srv := httptest.NewServer(e)
 	t.Cleanup(func() { cancel(); <-hub.Done(); srv.Close() })
 	return hub, "ws" + strings.TrimPrefix(srv.URL, "http") + "/ws?token=", secret

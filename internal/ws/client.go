@@ -2,6 +2,8 @@ package ws
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"log"
 	"strings"
@@ -14,12 +16,13 @@ const (
 	writeWait      = 10 * time.Second
 	pongWait       = 60 * time.Second
 	pingPeriod     = 30 * time.Second
-	maxMessageSize = 512 * 1024
+	maxMessageSize = 4096
 	sendBuffer     = 256
 	authTimeout    = 2 * time.Second
 )
 
 type Client struct {
+	id     string // unique across instances (used to skip the sender)
 	hub    *Hub
 	conn   *websocket.Conn
 	send   chan []byte
@@ -32,6 +35,7 @@ type Client struct {
 
 func NewClient(hub *Hub, conn *websocket.Conn, userID uint, role string, expiresAt time.Time) *Client {
 	return &Client{
+		id:        newClientID(),
 		hub:       hub,
 		conn:      conn,
 		send:      make(chan []byte, sendBuffer),
@@ -40,6 +44,12 @@ func NewClient(hub *Hub, conn *websocket.Conn, userID uint, role string, expires
 		rooms:     map[string]struct{}{},
 		expiresAt: expiresAt,
 	}
+}
+
+func newClientID() string {
+	b := make([]byte, 8)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
 }
 
 func (c *Client) Serve(ctx context.Context) {

@@ -20,6 +20,7 @@ import (
 	"echo-shop/internal/handler"
 	"echo-shop/internal/model"
 	"echo-shop/internal/ws"
+	"echo-shop/internal/wsbus"
 )
 
 func main() {
@@ -60,15 +61,20 @@ func main() {
 		port = "8080"
 	}
 
-	hub := ws.NewHub(handler.OrderRoomAuthorizer(gdb))
-	hubCtx, stopHub := context.WithCancel(context.Background())
-	go hub.Run(hubCtx)
+	rdb := cache.NewRedis(os.Getenv("REDIS_ADDR"), os.Getenv("REDIS_PASSWORD"))
+
+	// Task 3: every WebSocket notification goes through Redis channel "ws:events",
+	// so clients connected to ANY instance (8080, 8081...) receive it.
+	bus := wsbus.NewRedisBus(rdb, wsbus.Channel)
+	hub := ws.NewHub(handler.OrderRoomAuthorizer(gdb), bus)
+	bgCtx, stopBackground := context.WithCancel(context.Background())
+	go hub.Run(bgCtx)
+	go bus.Run(bgCtx, hub)
 
 	jwtAuth := auth.JWTAuth(secret)
-	rdb := cache.NewRedis(os.Getenv("REDIS_ADDR"), os.Getenv("REDIS_PASSWORD"))
 	authHandler := handler.NewAuthHandler(gdb, secret, rdb)
 	orderHandler := handler.NewOrderHandler(gdb, hub, rdb)
-	wsHandler := handler.NewWSHandler(hub, secret, allowedOrigins(port))
+	wsHandler := handler.NewWSHandler(hub, secret, rdb, allowedOrigins(port))
 	checkBlacklist := auth.CheckBlackList(rdb)
 
 	productHandler := handler.NewProductHandler(gdb, rdb)
@@ -106,11 +112,16 @@ func main() {
 	if err := e.Shutdown(ctx); err != nil {
 		log.Println("shutdown http: ", err)
 	}
-	stopHub()
-	select {
-	case <-hub.Done():
-	case <-ctx.Done():
-		log.Println("shutdown hub: timeout")
+	stopBackground()
+	for _, done := range []<-chan struct{}{hub.Done(), bus.Done()} {
+		select {
+		case <-done:
+		case <-ctx.Done():
+			log.Println("shutdown background: timeout")
+		}
+	}
+	if err := rdb.Close(); err != nil {
+		log.Println("close redis: ", err)
 	}
 
 	sqlDB, err := gdb.DB()
