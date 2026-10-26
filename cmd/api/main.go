@@ -71,10 +71,12 @@ func main() {
 
 	rdb := cache.NewRedis(os.Getenv("REDIS_ADDR"), os.Getenv("REDIS_PASSWORD"))
 	productHandler := handler.NewProductHandler(gdb, rdb)
-	// products = e.Group("products")
-	e.GET("/products", productHandler.List, cache.RedisCache(rdb, 60*time.Second))
-	e.GET("/products/:id", productHandler.Get, cache.RedisCache(rdb, 60*time.Second))
-	e.PUT("/products/:id", productHandler.Update, jwtAuth, auth.RequireRole(model.RoleAdmin))
+	products := e.Group("/products")
+	products.GET("/", productHandler.List, cache.RedisCache(rdb, 60*time.Second))
+	products.POST("/", productHandler.Create, jwtAuth, auth.RequireRole(model.RoleAdmin))
+	products.GET("/:id", productHandler.Get, cache.RedisCache(rdb, 60*time.Second))
+	products.PUT("/:id", productHandler.Update, jwtAuth, auth.RequireRole(model.RoleAdmin))
+	products.DELETE("/:id", productHandler.Delete, jwtAuth, auth.RequireRole(model.RoleAdmin))
 
 	e.GET("/health", func(c echo.Context) error {
 		return c.JSON(http.StatusOK, map[string]string{"status": "ok"})

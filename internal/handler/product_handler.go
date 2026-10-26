@@ -2,17 +2,17 @@ package handler
 
 import (
 	"context"
-	"echo-shop/internal/model"
 	"log"
 	"net/http"
 	"strconv"
 	"time"
 
-	"gorm.io/gorm"
-
 	"github.com/labstack/echo/v4"
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/sync/singleflight"
+	"gorm.io/gorm"
+
+	"echo-shop/internal/model"
 )
 
 type ProductHandler struct {
@@ -34,8 +34,8 @@ func NewProductHandler(db *gorm.DB, rdb *redis.Client) *ProductHandler {
 
 func (h *ProductHandler) List(c echo.Context) error {
 	result, err, _ := h.flight.Do("list", func() (any, error) {
-		log.Println("đi vào DB: list products")
-		time.Sleep((300 * time.Millisecond))
+		log.Println("go into DB: list products")
+		time.Sleep(300 * time.Millisecond)
 
 		var products []model.Product
 		ctx := context.WithoutCancel(c.Request().Context())
@@ -54,13 +54,20 @@ func (h *ProductHandler) Get(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid id")
 	}
-	time.Sleep(300 * time.Millisecond)
+	result, err, _ := h.flight.Do(`get/`+c.Param(" id"), func() (any, error) {
+		log.Println("go into DB: get products" + c.Param(" id"))
 
-	var p model.Product
-	if err := h.db.WithContext(c.Request().Context()).First(&p, id).Error; err != nil {
+		time.Sleep(300 * time.Millisecond)
+		var product model.Product
+		ctx := context.WithoutCancel(c.Request().Context())
+		err := h.db.WithContext(ctx).First(&product, id).Error
+		return product, err
+	})
+
+	if err != nil {
 		return queryError(c, err, "product not found")
 	}
-	return c.JSON(http.StatusOK, p)
+	return c.JSON(http.StatusOK, result.(model.Product))
 }
 
 func (h *ProductHandler) Update(c echo.Context) error {
@@ -71,7 +78,7 @@ func (h *ProductHandler) Update(c echo.Context) error {
 
 	var req productReq
 	if err := c.Bind(&req); err != nil || req.Name == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "name is require")
+		return echo.NewHTTPError(http.StatusBadRequest, "name is required")
 	}
 
 	ctx := c.Request().Context()
@@ -83,8 +90,50 @@ func (h *ProductHandler) Update(c echo.Context) error {
 	if err := h.db.WithContext(ctx).Save(&p).Error; err != nil {
 		return queryError(c, err, "")
 	}
-	if err := h.rdb.Del(ctx, "cache:/products", "cache:/products/"+c.Param("id")); err != nil {
+
+	if err := h.rdb.Del(ctx, "cache:/products", "cache:/products/"+c.Param("id")).Err(); err != nil {
 		log.Println("delete cache failed", err)
 	}
 	return c.JSON(http.StatusOK, p)
+}
+
+func (h *ProductHandler) Create(c echo.Context) error {
+	var input productReq
+	if err := c.Bind(&input); err != nil || input.Name == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "name is required")
+	}
+
+	ctx := c.Request().Context()
+	var p model.Product
+
+	p.Name, p.Description, p.Price, p.Quantity = input.Name, input.Description, input.Price, input.Quantity
+	if err := h.db.WithContext(ctx).Save(&p).Error; err != nil {
+		return queryError(c, err, "")
+	}
+
+	if err := h.rdb.Del(ctx, "cache:/products").Err(); err != nil {
+		log.Println("delete cache failed", err)
+	}
+	return c.JSON(http.StatusCreated, p)
+}
+
+func (h *ProductHandler) Delete(c echo.Context) error {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid id")
+	}
+
+	ctx := c.Request().Context()
+	var p model.Product
+	if err := h.db.WithContext(ctx).First(&p, id).Error; err != nil {
+		return queryError(c, err, "product not found")
+	}
+	if err := h.db.WithContext(ctx).Delete(&p).Error; err != nil {
+		return queryError(c, err, "")
+	}
+
+	if err := h.rdb.Del(ctx, "cache:/products", "cache:/products/"+c.Param("id")).Err(); err != nil {
+		log.Println("delete cache failed", err)
+	}
+	return c.NoContent(http.StatusNoContent)
 }
