@@ -65,15 +65,17 @@ func main() {
 	go hub.Run(hubCtx)
 
 	jwtAuth := auth.JWTAuth(secret)
-	authHandler := handler.NewAuthHandler(gdb, secret)
-	orderHandler := handler.NewOrderHandler(gdb, hub)
-	wsHandler := handler.NewWSHandler(hub, secret, allowedOrigins(port))
-
 	rdb := cache.NewRedis(os.Getenv("REDIS_ADDR"), os.Getenv("REDIS_PASSWORD"))
+	authHandler := handler.NewAuthHandler(gdb, secret, rdb)
+	orderHandler := handler.NewOrderHandler(gdb, hub, rdb)
+	wsHandler := handler.NewWSHandler(hub, secret, allowedOrigins(port))
+	checkBlacklist := auth.CheckBlackList(rdb)
+
 	productHandler := handler.NewProductHandler(gdb, rdb)
 	products := e.Group("/products")
-	products.GET("/", productHandler.List, cache.RedisCache(rdb, 60*time.Second))
-	products.POST("/", productHandler.Create, jwtAuth, auth.RequireRole(model.RoleAdmin))
+	products.GET("/top", productHandler.Top)
+	products.GET("", productHandler.List, cache.RedisCache(rdb, 60*time.Second))
+	products.POST("", productHandler.Create, jwtAuth, auth.RequireRole(model.RoleAdmin))
 	products.GET("/:id", productHandler.Get, cache.RedisCache(rdb, 60*time.Second))
 	products.PUT("/:id", productHandler.Update, jwtAuth, auth.RequireRole(model.RoleAdmin))
 	products.DELETE("/:id", productHandler.Delete, jwtAuth, auth.RequireRole(model.RoleAdmin))
@@ -84,10 +86,11 @@ func main() {
 	e.Static("/web", "web")
 
 	e.POST("/login", authHandler.Login)
-	e.GET("/me", authHandler.Me, jwtAuth)
+	e.POST("/logout", authHandler.Logout, jwtAuth, checkBlacklist)
+	e.GET("/me", authHandler.Me, jwtAuth, auth.CheckBlackList(rdb))
 	e.GET("/ws", wsHandler.Connect)
-	e.POST("/orders", orderHandler.Create, jwtAuth, auth.RequireRole(model.RoleCustomer))
-	e.PATCH("/orders/:id/status", orderHandler.UpdateStatus, jwtAuth, auth.RequireRole(model.RoleAdmin))
+	e.POST("/orders", orderHandler.Create, jwtAuth, checkBlacklist, auth.RequireRole(model.RoleCustomer))
+	e.PATCH("/orders/:id/status", orderHandler.UpdateStatus, jwtAuth, checkBlacklist, auth.RequireRole(model.RoleAdmin))
 
 	go func() {
 		if err := e.Start(":" + port); err != nil && err != http.ErrServerClosed {

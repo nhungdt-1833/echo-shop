@@ -2,10 +2,12 @@ package handler
 
 import (
 	"errors"
+	"log"
 	"net/http"
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
@@ -25,10 +27,11 @@ type loginReq struct {
 type AuthHandler struct {
 	db     *gorm.DB
 	secret []byte
+	rdb    *redis.Client
 }
 
-func NewAuthHandler(db *gorm.DB, secret []byte) *AuthHandler {
-	return &AuthHandler{db: db, secret: secret}
+func NewAuthHandler(db *gorm.DB, secret []byte, rdb *redis.Client) *AuthHandler {
+	return &AuthHandler{db: db, secret: secret, rdb: rdb}
 }
 
 func (h *AuthHandler) Login(c echo.Context) error {
@@ -80,6 +83,20 @@ func (h *AuthHandler) Me(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "internal error")
 	}
 	return c.JSON(http.StatusOK, user)
+}
+
+func (h *AuthHandler) Logout(c echo.Context) error {
+	claims, ok := auth.ClaimsFrom(c)
+	if !ok {
+		return echo.NewHTTPError(http.StatusUnauthorized, "missing auth")
+	}
+	ttl := time.Until(claims.ExpiresAt.Time)
+	ctx := c.Request().Context()
+	if err := h.rdb.Set(ctx, "blacklist:"+claims.ID, 1, ttl).Err(); err != nil {
+		log.Println("logout failed:", err)
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "logout failed, try again")
+	}
+	return c.NoContent(http.StatusNoContent)
 }
 
 func invalidCredentials() error {

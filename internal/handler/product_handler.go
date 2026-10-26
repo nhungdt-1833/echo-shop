@@ -28,8 +28,35 @@ type productReq struct {
 	Quantity    int    `json:"quantity"`
 }
 
+type topItem struct {
+	ProductID uint64 `json:"product_id"`
+	Sold      int64  `json:"sold"`
+}
+
 func NewProductHandler(db *gorm.DB, rdb *redis.Client) *ProductHandler {
 	return &ProductHandler{db: db, rdb: rdb}
+}
+
+func (h *ProductHandler) Top(c echo.Context) error {
+	n, err := strconv.Atoi(c.QueryParam("n"))
+	if err != nil || n < 1 || n > 50 {
+		n = 5
+	}
+
+	ctx := c.Request().Context()
+	ranks, err := h.rdb.ZRevRangeWithScores(ctx, "products:top", 0, int64(n-1)).Result()
+	if err != nil {
+		log.Println("read ranking failed:", err)
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "ranking unavailable")
+	}
+
+	items := make([]topItem, 0, len(ranks))
+	for _, r := range ranks {
+		id, _ := strconv.ParseUint(r.Member.(string), 10, 64)
+		items = append(items, topItem{ProductID: id, Sold: int64(r.Score)})
+	}
+
+	return c.JSON(http.StatusOK, items)
 }
 
 func (h *ProductHandler) List(c echo.Context) error {
@@ -54,8 +81,8 @@ func (h *ProductHandler) Get(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid id")
 	}
-	result, err, _ := h.flight.Do(`get/`+c.Param(" id"), func() (any, error) {
-		log.Println("go into DB: get products" + c.Param(" id"))
+	result, err, _ := h.flight.Do(`get/`+c.Param("id"), func() (any, error) {
+		log.Println("go into DB: get products" + c.Param("id"))
 
 		time.Sleep(300 * time.Millisecond)
 		var product model.Product
@@ -104,17 +131,17 @@ func (h *ProductHandler) Create(c echo.Context) error {
 	}
 
 	ctx := c.Request().Context()
-	var p model.Product
+	var product model.Product
 
-	p.Name, p.Description, p.Price, p.Quantity = input.Name, input.Description, input.Price, input.Quantity
-	if err := h.db.WithContext(ctx).Save(&p).Error; err != nil {
+	product.Name, product.Description, product.Price, product.Quantity = input.Name, input.Description, input.Price, input.Quantity
+	if err := h.db.WithContext(ctx).Save(&product).Error; err != nil {
 		return queryError(c, err, "")
 	}
 
 	if err := h.rdb.Del(ctx, "cache:/products").Err(); err != nil {
 		log.Println("delete cache failed", err)
 	}
-	return c.JSON(http.StatusCreated, p)
+	return c.JSON(http.StatusCreated, product)
 }
 
 func (h *ProductHandler) Delete(c echo.Context) error {
