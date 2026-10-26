@@ -9,7 +9,7 @@ import (
 
 func newTestHub(t *testing.T, authorize RoomAuthorizer) *Hub {
 	t.Helper()
-	h := NewHub(authorize)
+	h := NewHub(authorize, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	go h.Run(ctx)
 	t.Cleanup(func() { cancel(); <-h.Done() })
@@ -18,7 +18,7 @@ func newTestHub(t *testing.T, authorize RoomAuthorizer) *Hub {
 
 func newTestClient(t *testing.T, h *Hub, userID uint, role string, buffer int) *Client {
 	t.Helper()
-	c := &Client{hub: h, send: make(chan []byte, buffer), userID: userID, role: role, rooms: map[string]struct{}{}}
+	c := &Client{id: newClientID(), hub: h, send: make(chan []byte, buffer), userID: userID, role: role, rooms: map[string]struct{}{}}
 	if !h.registerClient(c) {
 		t.Fatal("hub stopped")
 	}

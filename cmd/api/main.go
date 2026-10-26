@@ -15,10 +15,12 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 
 	"echo-shop/internal/auth"
+	"echo-shop/internal/cache"
 	"echo-shop/internal/db"
 	"echo-shop/internal/handler"
 	"echo-shop/internal/model"
 	"echo-shop/internal/ws"
+	"echo-shop/internal/wsbus"
 )
 
 func main() {
@@ -59,14 +61,30 @@ func main() {
 		port = "8080"
 	}
 
-	hub := ws.NewHub(handler.OrderRoomAuthorizer(gdb))
-	hubCtx, stopHub := context.WithCancel(context.Background())
-	go hub.Run(hubCtx)
+	rdb := cache.NewRedis(os.Getenv("REDIS_ADDR"), os.Getenv("REDIS_PASSWORD"))
+
+	// Task 3: every WebSocket notification goes through Redis channel "ws:events",
+	// so clients connected to ANY instance (8080, 8081...) receive it.
+	bus := wsbus.NewRedisBus(rdb, wsbus.Channel)
+	hub := ws.NewHub(handler.OrderRoomAuthorizer(gdb), bus)
+	bgCtx, stopBackground := context.WithCancel(context.Background())
+	go hub.Run(bgCtx)
+	go bus.Run(bgCtx, hub)
 
 	jwtAuth := auth.JWTAuth(secret)
-	authHandler := handler.NewAuthHandler(gdb, secret)
-	orderHandler := handler.NewOrderHandler(gdb, hub)
-	wsHandler := handler.NewWSHandler(hub, secret, allowedOrigins(port))
+	authHandler := handler.NewAuthHandler(gdb, secret, rdb)
+	orderHandler := handler.NewOrderHandler(gdb, hub, rdb)
+	wsHandler := handler.NewWSHandler(hub, secret, rdb, allowedOrigins(port))
+	checkBlacklist := auth.CheckBlackList(rdb)
+
+	productHandler := handler.NewProductHandler(gdb, rdb)
+	products := e.Group("/products")
+	products.GET("/top", productHandler.Top)
+	products.GET("", productHandler.List, cache.RedisCache(rdb, 60*time.Second))
+	products.POST("", productHandler.Create, jwtAuth, checkBlacklist, auth.RequireRole(model.RoleAdmin))
+	products.GET("/:id", productHandler.Get, cache.RedisCache(rdb, 60*time.Second))
+	products.PUT("/:id", productHandler.Update, jwtAuth, checkBlacklist, auth.RequireRole(model.RoleAdmin))
+	products.DELETE("/:id", productHandler.Delete, jwtAuth, checkBlacklist, auth.RequireRole(model.RoleAdmin))
 
 	e.GET("/health", func(c echo.Context) error {
 		return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
@@ -74,10 +92,12 @@ func main() {
 	e.Static("/web", "web")
 
 	e.POST("/login", authHandler.Login)
-	e.GET("/me", authHandler.Me, jwtAuth)
+	e.POST("/refresh", authHandler.Refresh)
+	e.POST("/logout", authHandler.Logout, jwtAuth, checkBlacklist)
+	e.GET("/me", authHandler.Me, jwtAuth, checkBlacklist)
 	e.GET("/ws", wsHandler.Connect)
-	e.POST("/orders", orderHandler.Create, jwtAuth, auth.RequireRole(model.RoleCustomer))
-	e.PATCH("/orders/:id/status", orderHandler.UpdateStatus, jwtAuth, auth.RequireRole(model.RoleAdmin))
+	e.POST("/orders", orderHandler.Create, jwtAuth, checkBlacklist, auth.RequireRole(model.RoleCustomer))
+	e.PATCH("/orders/:id/status", orderHandler.UpdateStatus, jwtAuth, checkBlacklist, auth.RequireRole(model.RoleAdmin))
 
 	go func() {
 		if err := e.Start(":" + port); err != nil && err != http.ErrServerClosed {
@@ -92,11 +112,16 @@ func main() {
 	if err := e.Shutdown(ctx); err != nil {
 		log.Println("shutdown http: ", err)
 	}
-	stopHub()
-	select {
-	case <-hub.Done():
-	case <-ctx.Done():
-		log.Println("shutdown hub: timeout")
+	stopBackground()
+	for _, done := range []<-chan struct{}{hub.Done(), bus.Done()} {
+		select {
+		case <-done:
+		case <-ctx.Done():
+			log.Println("shutdown background: timeout")
+		}
+	}
+	if err := rdb.Close(); err != nil {
+		log.Println("close redis: ", err)
 	}
 
 	sqlDB, err := gdb.DB()

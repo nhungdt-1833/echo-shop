@@ -1,15 +1,31 @@
 package ws
 
+// Public API, safe from any goroutine. With a bus, notifications reach the
+// clients connected to EVERY instance, not only this one.
+
 func (h *Hub) SendToUser(userID uint, m Message) {
-	h.enqueue(op{kind: opSendUser, userID: userID, data: encode(m)})
+	h.publish(Event{Target: TargetUser, UserID: userID, Data: encode(m)})
 }
 
 func (h *Hub) SendToRole(role string, m Message) {
-	h.enqueue(op{kind: opSendRole, key: role, data: encode(m)})
+	h.publish(Event{Target: TargetRole, Key: role, Data: encode(m)})
 }
 
 func (h *Hub) SendToRoom(room string, m Message) {
-	h.enqueue(op{kind: opSendRoom, key: room, data: encode(m)})
+	h.publish(Event{Target: TargetRoom, Key: room, Data: encode(m)})
+}
+
+// Deliver is called by the bus for every event it receives.
+func (h *Hub) Deliver(e Event) {
+	h.enqueue(op{kind: opDeliver, event: e})
+}
+
+func (h *Hub) publish(e Event) {
+	if h.bus != nil {
+		h.bus.Publish(e)
+		return
+	}
+	h.Deliver(e)
 }
 
 func (h *Hub) sendToClient(c *Client, m Message) {
@@ -17,7 +33,7 @@ func (h *Hub) sendToClient(c *Client, m Message) {
 }
 
 func (h *Hub) relay(from *Client, m Message, skipSender bool) {
-	h.enqueue(op{kind: opSendRoom, client: from, key: m.Room, data: encode(m), skipSender: skipSender})
+	h.enqueue(op{kind: opRelay, client: from, key: m.Room, data: encode(m), skipSender: skipSender})
 }
 
 func (h *Hub) joinRoom(c *Client, room string)  { h.enqueue(op{kind: opJoin, client: c, key: room}) }

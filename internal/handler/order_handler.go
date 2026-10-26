@@ -3,11 +3,13 @@ package handler
 import (
 	"context"
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/labstack/echo/v4"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 
 	"echo-shop/internal/auth"
@@ -18,10 +20,11 @@ import (
 type OrderHandler struct {
 	db  *gorm.DB
 	hub *ws.Hub
+	rdb *redis.Client
 }
 
-func NewOrderHandler(db *gorm.DB, hub *ws.Hub) *OrderHandler {
-	return &OrderHandler{db: db, hub: hub}
+func NewOrderHandler(db *gorm.DB, hub *ws.Hub, rdb *redis.Client) *OrderHandler {
+	return &OrderHandler{db: db, hub: hub, rdb: rdb}
 }
 
 type createOrderReq struct {
@@ -58,6 +61,9 @@ func (h *OrderHandler) Create(c echo.Context) error {
 	}
 	if err := h.db.WithContext(ctx).Create(&order).Error; err != nil {
 		return queryError(c, err, "")
+	}
+	if err := h.rdb.ZIncrBy(ctx, "products:top", float64(order.Quantity), strconv.FormatUint(uint64(product.ID), 10)).Err(); err != nil {
+		log.Println("update ranking failed:", err)
 	}
 
 	h.hub.SendToRole(model.RoleAdmin, ws.Message{
