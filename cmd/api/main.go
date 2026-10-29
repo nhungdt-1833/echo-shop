@@ -19,6 +19,7 @@ import (
 	"echo-shop/internal/db"
 	"echo-shop/internal/handler"
 	"echo-shop/internal/model"
+	"echo-shop/internal/queue"
 	"echo-shop/internal/ws"
 	"echo-shop/internal/wsbus"
 )
@@ -71,9 +72,14 @@ func main() {
 	go hub.Run(bgCtx)
 	go bus.Run(bgCtx, hub)
 
+	mq, err := queue.DialRabbit(envOr("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"))
+	if err != nil {
+		log.Fatal("rabbitmq: ", err)
+	}
+
 	jwtAuth := auth.JWTAuth(secret)
 	authHandler := handler.NewAuthHandler(gdb, secret, rdb)
-	orderHandler := handler.NewOrderHandler(gdb, hub, rdb)
+	orderHandler := handler.NewOrderHandler(gdb, hub, mq)
 	wsHandler := handler.NewWSHandler(hub, secret, rdb, allowedOrigins(port))
 	checkBlacklist := auth.CheckBlackList(rdb)
 
@@ -120,6 +126,7 @@ func main() {
 			log.Println("shutdown background: timeout")
 		}
 	}
+	mq.Close()
 	if err := rdb.Close(); err != nil {
 		log.Println("close redis: ", err)
 	}
@@ -144,4 +151,11 @@ func allowedOrigins(port string) []string {
 		origins[i] = strings.TrimSpace(origins[i])
 	}
 	return origins
+}
+
+func envOr(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }

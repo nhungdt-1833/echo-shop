@@ -4,11 +4,11 @@ package ws
 // clients connected to EVERY instance, not only this one.
 
 func (h *Hub) SendToUser(userID uint, m Message) {
-	h.publish(Event{Target: TargetUser, UserID: userID, Data: encode(m)})
+	h.publish(UserEvent(userID, m))
 }
 
 func (h *Hub) SendToRole(role string, m Message) {
-	h.publish(Event{Target: TargetRole, Key: role, Data: encode(m)})
+	h.publish(RoleEvent(role, m))
 }
 
 func (h *Hub) SendToRoom(room string, m Message) {

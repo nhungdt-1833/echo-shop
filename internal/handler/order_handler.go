@@ -9,22 +9,26 @@ import (
 	"strings"
 
 	"github.com/labstack/echo/v4"
-	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 
 	"echo-shop/internal/auth"
 	"echo-shop/internal/model"
+	"echo-shop/internal/queue"
 	"echo-shop/internal/ws"
 )
+
+type eventPublisher interface {
+	Publish(ctx context.Context, ev queue.OrderEvent) error
+}
 
 type OrderHandler struct {
 	db  *gorm.DB
 	hub *ws.Hub
-	rdb *redis.Client
+	mq  eventPublisher
 }
 
-func NewOrderHandler(db *gorm.DB, hub *ws.Hub, rdb *redis.Client) *OrderHandler {
-	return &OrderHandler{db: db, hub: hub, rdb: rdb}
+func NewOrderHandler(db *gorm.DB, hub *ws.Hub, mq eventPublisher) *OrderHandler {
+	return &OrderHandler{db: db, hub: hub, mq: mq}
 }
 
 type createOrderReq struct {
@@ -59,18 +63,17 @@ func (h *OrderHandler) Create(c echo.Context) error {
 		Total:     product.Price * int64(req.Quantity),
 		Status:    model.OrderPending,
 	}
-	if err := h.db.WithContext(ctx).Create(&order).Error; err != nil {
-		return queryError(c, err, "")
-	}
-	if err := h.rdb.ZIncrBy(ctx, "products:top", float64(order.Quantity), strconv.FormatUint(uint64(product.ID), 10)).Err(); err != nil {
-		log.Println("update ranking failed:", err)
-	}
-
-	h.hub.SendToRole(model.RoleAdmin, ws.Message{
-		Type: ws.TypeNewOrder, OrderID: order.ID, UserID: order.UserID,
-		Total: order.Total, Status: order.Status,
+	err := h.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&order).Error; err != nil {
+			return err
+		}
+		return h.mq.Publish(ctx, queue.NewOrderEvent(queue.KeyCreated, order))
 	})
-	return c.JSON(http.StatusCreated, order)
+	if err != nil {
+		log.Println("create order failed:", err)
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "order not accepted, try again")
+	}
+	return c.JSON(http.StatusAccepted, order)
 }
 
 func (h *OrderHandler) UpdateStatus(c echo.Context) error {
