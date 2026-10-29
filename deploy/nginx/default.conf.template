@@ -1,0 +1,24 @@
+# Task 5: Nginx in front of 2 API instances (round-robin).
+# The nginx image replaces ${API_HOST} when the container starts (envsubst).
+# Run the API with BEHIND_PROXY=true so it reads the client IP from X-Forwarded-For.
+upstream echo_shop {
+  server ${API_HOST}:8080;
+  server ${API_HOST}:8081;
+}
+
+server {
+  listen 8000;
+
+  location / {
+    proxy_pass http://echo_shop;
+    proxy_set_header Host $host;
+    # Append the IP Nginx sees to the X-Forwarded-For chain.
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Real-IP $remote_addr;
+
+    # WebSocket (/ws) needs the Upgrade headers to pass through.
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $http_connection;
+  }
+}

@@ -34,6 +34,16 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "8000:8000"
+    environment:
+      API_HOST: ${API_HOST:-host.docker.internal}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./deploy/nginx:/etc/nginx/templates:ro
 
 volumes:
   pgdata:

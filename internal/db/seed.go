@@ -21,7 +21,7 @@ func SeedUsers(gdb *gorm.DB, password string) error {
 	users := []model.User{
 		{Name: "Admin", Email: "admin@echo-shop.vn", Role: model.RoleAdmin},
 		{Name: "Clara", Email: "clara@echo-shop.vn", Role: model.RoleCustomer},
-		{Name: "Leo", Email: "leo@echo-shop.vn", Role: model.RoleCustomer},
+		{Name: "Leo", Email: "leo@echo-shop.vn", Role: model.RoleCustomer, Plan: model.PlanPro},
 	}
 	for _, u := range users {
 		u.Password = string(hash)

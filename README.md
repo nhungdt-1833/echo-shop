@@ -13,5 +13,9 @@ go run ./cmd/worker email          # order.paid → confirmation email
 go run ./cmd/worker notify         # order.*    → WebSocket via Redis
 go run ./cmd/worker kafka-bridge   # order.*    → Kafka topic order-events
 go run ./cmd/worker analytics      # Kafka group "analytics" → stats + ranking
+
+BEHIND_PROXY=true PORT=8080 go run ./cmd/api
+BEHIND_PROXY=true PORT=8081 go run ./cmd/api
+API_HOST=$(hostname -I | awk '{print $1}') docker compose up -d nginx
 go test -race ./...
 ```

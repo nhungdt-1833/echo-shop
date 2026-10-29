@@ -139,7 +139,7 @@ func (h *AuthHandler) Logout(c echo.Context) error {
 }
 
 func (h *AuthHandler) issueTokens(c echo.Context, user model.User) error {
-	token, err := auth.GenerateToken(h.secret, user.ID, user.Role, tokenTTL)
+	token, err := auth.GenerateToken(h.secret, user.ID, user.Role, user.Plan, tokenTTL)
 	if err != nil {
 		c.Logger().Errorf("sign token: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, "internal error")

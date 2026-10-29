@@ -47,7 +47,7 @@ var allowedOrigin = http.Header{"Origin": {"http://allowed.test"}}
 
 func TestWSRejectsForeignOrMissingOrigin(t *testing.T) {
 	_, url, secret := newWSServer(t)
-	token, _ := auth.GenerateToken(secret, 2, model.RoleCustomer, time.Minute)
+	token, _ := auth.GenerateToken(secret, 2, model.RoleCustomer, model.PlanFree, time.Minute)
 	for name, header := range map[string]http.Header{
 		"foreign": {"Origin": {"http://evil.test"}},
 		"missing": nil,
@@ -61,7 +61,7 @@ func TestWSRejectsForeignOrMissingOrigin(t *testing.T) {
 
 func TestWSClosesWith1008WhenTokenExpires(t *testing.T) {
 	_, url, secret := newWSServer(t)
-	token, _ := auth.GenerateToken(secret, 2, model.RoleCustomer, time.Second)
+	token, _ := auth.GenerateToken(secret, 2, model.RoleCustomer, model.PlanFree, time.Second)
 	conn, _, err := websocket.DefaultDialer.Dial(url+token, allowedOrigin)
 	if err != nil {
 		t.Fatal(err)
@@ -78,7 +78,7 @@ func TestWSClosesWith1008WhenTokenExpires(t *testing.T) {
 
 func TestWSNoGoroutineLeakAfterAbruptDisconnect(t *testing.T) {
 	_, url, secret := newWSServer(t)
-	token, _ := auth.GenerateToken(secret, 2, model.RoleCustomer, time.Minute)
+	token, _ := auth.GenerateToken(secret, 2, model.RoleCustomer, model.PlanFree, time.Minute)
 	before := runtime.NumGoroutine()
 
 	const n = 20
@@ -111,7 +111,7 @@ func waitGoroutines(t *testing.T, ok func(int) bool, what string) {
 
 func TestWSDeliversTargetedMessage(t *testing.T) {
 	hub, url, secret := newWSServer(t)
-	token, _ := auth.GenerateToken(secret, 2, model.RoleCustomer, time.Minute)
+	token, _ := auth.GenerateToken(secret, 2, model.RoleCustomer, model.PlanFree, time.Minute)
 	conn, _, err := websocket.DefaultDialer.Dial(url+token, allowedOrigin)
 	if err != nil {
 		t.Fatal(err)
