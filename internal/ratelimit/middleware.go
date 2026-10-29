@@ -14,8 +14,8 @@ import (
 const redisTimeout = 200 * time.Millisecond
 
 type Rule struct {
-	Name   string
-	Window time.Duration
+	Name    string
+	Window  time.Duration
 	Subject func(c echo.Context) (id string, limit int, ok bool)
 }
 

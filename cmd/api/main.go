@@ -98,6 +98,12 @@ func main() {
 	checkBlacklist := auth.CheckBlackList(rdb)
 	rateLimitHandler := handler.NewRateLimitHandler(gdb, limiter)
 
+	scheduler, exports, err := startJobs(gdb, rdb)
+	if err != nil {
+		log.Fatal("jobs: ", err)
+	}
+	exportHandler := handler.NewExportHandler(exports)
+
 	productHandler := handler.NewProductHandler(gdb, rdb)
 	products := e.Group("/products")
 	products.GET("/top", productHandler.Top)
@@ -120,6 +126,10 @@ func main() {
 	e.POST("/orders", orderHandler.Create, jwtAuth, checkBlacklist, apiLimit, ordersLimit, auth.RequireRole(model.RoleCustomer))
 	e.PATCH("/orders/:id/status", orderHandler.UpdateStatus, jwtAuth, checkBlacklist, apiLimit, auth.RequireRole(model.RoleAdmin))
 	e.GET("/admin/ratelimit/:user", rateLimitHandler.Show, jwtAuth, checkBlacklist, apiLimit, auth.RequireRole(model.RoleAdmin))
+	adminOnly := []echo.MiddlewareFunc{jwtAuth, checkBlacklist, apiLimit, auth.RequireRole(model.RoleAdmin)}
+	e.POST("/admin/exports/orders", exportHandler.Create, adminOnly...)
+	e.GET("/admin/exports/:job_id", exportHandler.Show, adminOnly...)
+	e.GET("/admin/exports/:job_id/download", exportHandler.Download, adminOnly...)
 
 	go func() {
 		if err := e.Start(":" + port); err != nil && err != http.ErrServerClosed {
@@ -134,6 +144,9 @@ func main() {
 	if err := e.Shutdown(ctx); err != nil {
 		log.Println("shutdown http: ", err)
 	}
+	scheduler.Stop(ctx)
+	exports.Shutdown(ctx)
+	log.Println("jobs and export workers stopped")
 	stopBackground()
 	for _, done := range []<-chan struct{}{hub.Done(), bus.Done()} {
 		select {

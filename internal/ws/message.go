@@ -10,6 +10,8 @@ const (
 	TypeTyping      = "typing"
 	TypeChat        = "chat"
 	TypeError       = "error"
+	TypeExportDone  = "export_done"
+	TypeExportFail  = "export_failed"
 )
 
 type Message struct {
@@ -21,6 +23,7 @@ type Message struct {
 	Total   int64  `json:"total,omitempty"`
 	Text    string `json:"text,omitempty"`
 	Error   string `json:"error,omitempty"`
+	JobID   string `json:"job_id,omitempty"`
 }
 
 func encode(m Message) []byte {
