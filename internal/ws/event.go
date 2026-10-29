@@ -20,6 +20,14 @@ type Event struct {
 	Data   json.RawMessage `json:"data"`
 }
 
+func UserEvent(userID uint, m Message) Event {
+	return Event{Target: TargetUser, UserID: userID, Data: encode(m)}
+}
+
+func RoleEvent(role string, m Message) Event {
+	return Event{Target: TargetRole, Key: role, Data: encode(m)}
+}
+
 // Bus spreads events to every instance (Redis Pub/Sub in production).
 // Publish must never block: it is called from inside Hub.Run.
 // The bus must hand every event back to Hub.Deliver on each instance,

@@ -93,3 +93,8 @@ func (b *RedisBus) publish(ctx context.Context, e ws.Event, local Deliverer) {
 }
 
 func (b *RedisBus) Done() <-chan struct{} { return b.done }
+
+func Send(ctx context.Context, rdb *redis.Client, e ws.Event) error {
+	data, _ := json.Marshal(e) // Event has only plain fields
+	return rdb.Publish(ctx, Channel, data).Err()
+}
