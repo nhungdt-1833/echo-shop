@@ -23,6 +23,7 @@ type Jobs struct {
 	Mailer         mail.Mailer
 	Loc            *time.Location
 	PendingTimeout time.Duration
+	ExportDir      string
 }
 
 func (j *Jobs) DailyReport(ctx context.Context) error {
