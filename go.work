@@ -1,0 +1,8 @@
+go 1.26.6
+
+use (
+	.
+	./services/inventory-service
+	./services/user-service
+	./shared
+)
